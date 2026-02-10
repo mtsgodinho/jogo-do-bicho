@@ -22,7 +22,8 @@ import {
   Users,
   Key,
   Trash2,
-  Lock
+  Lock,
+  RefreshCcw
 } from 'lucide-react';
 
 // --- Sub-Components ---
@@ -73,18 +74,41 @@ const Navigation: React.FC<{ view: string; setView: (v: any) => void; currentUse
 
 // --- Helpers ---
 const loadState = (): AppState => {
-  if (typeof window === 'undefined') return { currentUser: null, users: [], bets: [], draws: [], animals: ANIMALS };
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try { return JSON.parse(saved); } catch (e) { console.error("Falha ao ler estado", e); }
-  }
-  return {
+  const defaultAdmin: User = { 
+    id: '1', 
+    username: 'admin', 
+    password: '123', 
+    rpName: 'Diretor Geral', 
+    balance: 1000000, 
+    role: UserRole.ADMIN, 
+    createdAt: Date.now() 
+  };
+
+  const initialState: AppState = {
     currentUser: null,
-    users: [{ id: '1', username: 'admin', password: '123', rpName: 'Diretor Geral', balance: 1000000, role: UserRole.ADMIN, createdAt: Date.now() }],
+    users: [defaultAdmin],
     bets: [],
     draws: [],
     animals: ANIMALS
   };
+
+  if (typeof window === 'undefined') return initialState;
+  
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try { 
+      const parsed = JSON.parse(saved);
+      // Migração: Se não houver usuários ou se o admin estiver sem senha, força a injeção do padrão
+      if (!parsed.users || parsed.users.length === 0 || !parsed.users.find((u: any) => u.username === 'admin' && u.password === '123')) {
+        const otherUsers = (parsed.users || []).filter((u: any) => u.username !== 'admin');
+        parsed.users = [defaultAdmin, ...otherUsers];
+      }
+      return { ...initialState, ...parsed }; 
+    } catch (e) { 
+      console.error("Falha ao ler estado", e); 
+    }
+  }
+  return initialState;
 };
 
 const saveState = (state: AppState) => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); };
@@ -106,8 +130,9 @@ export default function App() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanUsername = loginForm.username.trim().toLowerCase();
     const user = state.users.find(u => 
-      u.username.toLowerCase() === loginForm.username.trim().toLowerCase() && 
+      u.username.toLowerCase() === cleanUsername && 
       u.password === loginForm.password
     );
     
@@ -117,6 +142,13 @@ export default function App() {
       showToast(`Bem-vindo, ${user.rpName}!`); 
     } else { 
       showToast('Usuário ou Senha incorretos.', 'error'); 
+    }
+  };
+
+  const handleReset = () => {
+    if (window.confirm("Deseja resetar o sistema? Isso apagará todos os usuários e apostas e restaurará o login 'admin' / '123'.")) {
+      localStorage.removeItem(STORAGE_KEY);
+      window.location.reload();
     }
   };
 
@@ -212,7 +244,7 @@ export default function App() {
               <p className="text-slate-500 uppercase text-[10px] font-bold tracking-[0.2em]">Acesso Restrito ao Sistema</p>
             </div>
 
-            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
+            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden">
               {!showImport ? (
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-2">
@@ -222,7 +254,7 @@ export default function App() {
                       <input 
                         type="text" 
                         className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 pl-12 font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
-                        placeholder="NOME DE USUÁRIO"
+                        placeholder="admin"
                         value={loginForm.username}
                         onChange={e => setLoginForm({...loginForm, username: e.target.value})}
                         required
@@ -246,9 +278,14 @@ export default function App() {
                   <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-indigo-900/20">
                     Entrar
                   </button>
-                  <button type="button" onClick={() => setShowImport(true)} className="w-full text-[10px] text-slate-500 hover:text-indigo-400 font-bold uppercase transition-colors">
-                    Sincronizar Backup
-                  </button>
+                  <div className="flex flex-col gap-3 mt-4">
+                    <button type="button" onClick={() => setShowImport(true)} className="w-full text-[10px] text-slate-500 hover:text-indigo-400 font-bold uppercase transition-colors flex items-center justify-center gap-2">
+                      <Upload size={12}/> Sincronizar Backup
+                    </button>
+                    <button type="button" onClick={handleReset} className="w-full text-[10px] text-rose-500/50 hover:text-rose-400 font-bold uppercase transition-colors flex items-center justify-center gap-2">
+                      <RefreshCcw size={12}/> Limpar Dados/Resetar
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <div className="space-y-4 animate-in fade-in zoom-in duration-200">
@@ -266,7 +303,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <p className="text-center text-[9px] text-slate-700 font-bold uppercase tracking-widest">v3.0.0 • Sistema de Gestão RP</p>
+            <p className="text-center text-[9px] text-slate-700 font-bold uppercase tracking-widest">v3.1.0 • Sistema de Gestão RP</p>
           </div>
         </div>
       ) : (
