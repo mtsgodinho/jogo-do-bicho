@@ -27,7 +27,8 @@ import {
 } from 'lucide-react';
 
 // --- Sub-Components ---
-const AnimalIcon: React.FC<{ animal: Animal; className?: string }> = ({ animal, className = "" }) => {
+const AnimalIcon: React.FC<{ animal: Animal | undefined; className?: string }> = ({ animal, className = "" }) => {
+  if (!animal) return <div className={`bg-slate-800 rounded-md ${className} flex items-center justify-center`}>?</div>;
   const isUrl = animal.icon.startsWith('http');
   if (isUrl) {
     return (
@@ -65,7 +66,7 @@ const Navigation: React.FC<{ view: string; setView: (v: any) => void; currentUse
         {currentUser?.role === UserRole.ADMIN && <button onClick={() => setView('ADMIN')} className={`flex items-center space-x-1 transition-colors ${view === 'ADMIN' ? 'text-rose-400 font-bold' : 'text-slate-400 hover:text-rose-200'}`}><Settings size={18} /><span>Gerenciamento</span></button>}
       </div>
       <div className="flex items-center space-x-4">
-        <div className="bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 flex items-center space-x-2"><Wallet size={16} className="text-emerald-400" /><span className="text-sm font-mono font-bold text-slate-100">RP$ {currentUser?.balance.toLocaleString()}</span></div>
+        <div className="bg-slate-800 px-3 py-1.5 rounded-full border border-slate-700 flex items-center space-x-2"><Wallet size={16} className="text-emerald-400" /><span className="text-sm font-mono font-bold text-slate-100">RP$ {currentUser?.balance?.toLocaleString() || 0}</span></div>
         <button onClick={onLogout} className="p-2 text-slate-400 hover:text-rose-400 transition-colors"><LogOut size={20} /></button>
       </div>
     </div>
@@ -98,14 +99,17 @@ const loadState = (): AppState => {
   if (saved) {
     try { 
       const parsed = JSON.parse(saved);
-      // Migração: Se não houver usuários ou se o admin estiver sem senha, força a injeção do padrão
-      if (!parsed.users || parsed.users.length === 0 || !parsed.users.find((u: any) => u.username === 'admin' && u.password === '123')) {
-        const otherUsers = (parsed.users || []).filter((u: any) => u.username !== 'admin');
-        parsed.users = [defaultAdmin, ...otherUsers];
-      }
-      return { ...initialState, ...parsed }; 
+      // Garantir que arrays críticos existam e não quebrem o .map()
+      return {
+        currentUser: parsed.currentUser || null,
+        users: Array.isArray(parsed.users) ? (parsed.users.length > 0 ? parsed.users : [defaultAdmin]) : [defaultAdmin],
+        bets: Array.isArray(parsed.bets) ? parsed.bets : [],
+        draws: Array.isArray(parsed.draws) ? parsed.draws : [],
+        animals: ANIMALS // Sempre usar a lista atualizada de animais
+      };
     } catch (e) { 
       console.error("Falha ao ler estado", e); 
+      return initialState;
     }
   }
   return initialState;
@@ -190,7 +194,12 @@ export default function App() {
     try {
       if (!dbCode.trim()) return;
       const decoded = JSON.parse(atob(dbCode.trim()));
-      setState(prev => ({ ...prev, users: decoded.users, bets: decoded.bets, draws: decoded.draws }));
+      setState(prev => ({ 
+        ...prev, 
+        users: Array.isArray(decoded.users) ? decoded.users : prev.users, 
+        bets: Array.isArray(decoded.bets) ? decoded.bets : [], 
+        draws: Array.isArray(decoded.draws) ? decoded.draws : [] 
+      }));
       showToast('Dados sincronizados com sucesso!');
       setDbCode('');
       setShowImport(false);
@@ -303,7 +312,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            <p className="text-center text-[9px] text-slate-700 font-bold uppercase tracking-widest">v3.1.0 • Sistema de Gestão RP</p>
+            <p className="text-center text-[9px] text-slate-700 font-bold uppercase tracking-widest">v3.1.1 • Sistema de Gestão RP</p>
           </div>
         </div>
       ) : (
@@ -323,7 +332,7 @@ export default function App() {
                       <Wallet className="text-emerald-400" size={24} />
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saldo Atual</span>
                     </div>
-                    <h2 className="text-3xl font-black font-mono text-emerald-400">RP$ {state.currentUser?.balance.toLocaleString()}</h2>
+                    <h2 className="text-3xl font-black font-mono text-emerald-400">RP$ {state.currentUser?.balance?.toLocaleString() || 0}</h2>
                   </div>
                   <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800">
                     <div className="flex justify-between items-start mb-4">
@@ -337,10 +346,10 @@ export default function App() {
                       <Trophy className="text-amber-500" size={24} />
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Último Sorteado</span>
                     </div>
-                    {state.draws[0] ? (
+                    {state.draws && state.draws[0] ? (
                       <div className="flex items-center gap-3">
-                        <AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)!} className="w-10 h-10 text-2xl" />
-                        <span className="font-black text-lg uppercase">{ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)?.name}</span>
+                        <AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)} className="w-10 h-10 text-2xl" />
+                        <span className="font-black text-lg uppercase">{ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)?.name || 'Desconhecido'}</span>
                       </div>
                     ) : <span className="text-slate-600 italic text-sm uppercase font-bold">Aguardando...</span>}
                   </div>
@@ -390,30 +399,30 @@ export default function App() {
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto">
                   {isAdmin ? (
-                    state.draws.length === 0 ? <div className="p-12 text-center text-slate-600 italic">Nenhuma extração registrada.</div> :
+                    (!state.draws || state.draws.length === 0) ? <div className="p-12 text-center text-slate-600 italic">Nenhuma extração registrada.</div> :
                     state.draws.map(d => (
                       <div key={d.id} className="p-6 flex justify-between items-center border-b border-slate-800 last:border-0 hover:bg-slate-800/20 transition-colors">
                         <div className="flex items-center gap-6">
-                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)!} className="w-14 h-14 text-3xl" />
+                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)} className="w-14 h-14 text-3xl" />
                           <div>
-                            <span className="font-black block uppercase text-lg">{ANIMALS.find(a => a.id === d.winningAnimalId)?.name}</span>
+                            <span className="font-black block uppercase text-lg">{ANIMALS.find(a => a.id === d.winningAnimalId)?.name || 'Desconhecido'}</span>
                             <span className="text-[10px] text-slate-500 font-mono font-bold">{new Date(d.drawTime).toLocaleString()}</span>
                           </div>
                         </div>
                         <div className="text-right">
-                          <span className="font-mono text-indigo-400 font-black text-3xl">Nº {String(d.winningNumber).padStart(2, '0')}</span>
+                          <span className="font-mono text-indigo-400 font-black text-3xl">Nº {String(d.winningNumber || 0).padStart(2, '0')}</span>
                         </div>
                       </div>
                     ))
                   ) : (
-                    myBets.length === 0 ? <div className="p-12 text-center text-slate-600 italic">Nenhuma aposta encontrada.</div> :
+                    (!myBets || myBets.length === 0) ? <div className="p-12 text-center text-slate-600 italic">Nenhuma aposta encontrada.</div> :
                     [...myBets].reverse().map(b => (
                       <div key={b.id} className="p-5 flex justify-between items-center border-b border-slate-800 last:border-0">
                         <div className="flex items-center gap-4">
-                          <AnimalIcon animal={ANIMALS.find(a => a.id === b.animalId)!} className="w-10 h-10 text-2xl" />
+                          <AnimalIcon animal={ANIMALS.find(a => a.id === b.animalId)} className="w-10 h-10 text-2xl" />
                           <div>
-                            <span className="font-black block text-sm uppercase tracking-tight">{ANIMALS.find(a => a.id === b.animalId)?.name}</span>
-                            <span className="text-[10px] text-slate-500 font-bold uppercase">RP$ {b.amount.toLocaleString()}</span>
+                            <span className="font-black block text-sm uppercase tracking-tight">{ANIMALS.find(a => a.id === b.animalId)?.name || 'Desconhecido'}</span>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase">RP$ {b.amount?.toLocaleString() || 0}</span>
                           </div>
                         </div>
                         <div className={`text-[10px] font-black px-4 py-2 rounded-xl border uppercase tracking-widest ${b.status === 'WON' ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : b.status === 'LOST' ? 'border-rose-500 text-rose-500 bg-rose-500/10' : 'border-amber-500 text-amber-500 bg-amber-500/10'}`}>
@@ -483,10 +492,10 @@ export default function App() {
                   <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-sm">
                     <div className="p-5 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
                       <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Users size={16} className="text-emerald-400"/> Gestão de Usuários</h3>
-                      <span className="text-[10px] font-bold text-slate-500">{state.users.length} ATIVOS</span>
+                      <span className="text-[10px] font-bold text-slate-500">{state.users?.length || 0} ATIVOS</span>
                     </div>
                     <div className="max-h-80 overflow-y-auto">
-                      {state.users.map(u => (
+                      {state.users && state.users.map(u => (
                         <div key={u.id} className="flex justify-between items-center p-4 border-b border-slate-800 hover:bg-slate-800/30 transition-all">
                           <div>
                             <span className="font-black text-xs uppercase block">{u.rpName}</span>
@@ -497,7 +506,7 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-4">
                              <div className="text-right">
-                               <span className="font-mono text-emerald-400 font-black text-xs">RP$ {u.balance.toLocaleString()}</span>
+                               <span className="font-mono text-emerald-400 font-black text-xs">RP$ {u.balance?.toLocaleString() || 0}</span>
                                <span className={`block text-[8px] font-black uppercase ${u.role === UserRole.ADMIN ? 'text-rose-400' : 'text-indigo-400'}`}>{u.role}</span>
                              </div>
                              <button onClick={() => deleteUser(u.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-colors">
