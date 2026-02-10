@@ -7,6 +7,7 @@ export enum UserRole {
 export interface User {
   id: string;
   username: string;
+  password: string; // Nova propriedade
   rpName: string;
   balance: number;
   role: UserRole;
@@ -34,7 +35,7 @@ export interface Bet {
 
 export interface Draw {
   id: string;
-  drawTime: number; // timestamp
+  drawTime: number;
   winningNumber: number | null;
   winningAnimalId: number | null;
   status: 'SCHEDULED' | 'COMPLETED';

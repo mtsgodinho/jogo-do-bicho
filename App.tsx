@@ -20,7 +20,9 @@ import {
   Download,
   Upload,
   Users,
-  RefreshCw
+  Key,
+  Trash2,
+  Lock
 } from 'lucide-react';
 
 // --- Sub-Components ---
@@ -78,7 +80,7 @@ const loadState = (): AppState => {
   }
   return {
     currentUser: null,
-    users: [{ id: '1', username: 'admin', rpName: 'Diretor Geral', balance: 1000000, role: UserRole.ADMIN, createdAt: Date.now() }],
+    users: [{ id: '1', username: 'admin', password: '123', rpName: 'Diretor Geral', balance: 1000000, role: UserRole.ADMIN, createdAt: Date.now() }],
     bets: [],
     draws: [],
     animals: ANIMALS
@@ -91,55 +93,65 @@ export default function App() {
   const [state, setState] = useState<AppState>(loadState);
   const [view, setView] = useState<'LOGIN' | 'DASHBOARD' | 'BET' | 'HISTORY' | 'ADMIN'>('LOGIN');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [loginData, setLoginData] = useState({ username: '' });
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [selectedAnimalId, setSelectedAnimalId] = useState<number | null>(null);
   const [betAmount, setBetAmount] = useState<number>(100);
   
-  const [newUser, setNewUser] = useState({ username: '', rpName: '', role: UserRole.USER, balance: 5000 });
+  const [newUser, setNewUser] = useState({ username: '', password: '', rpName: '', role: UserRole.USER, balance: 5000 });
   const [dbCode, setDbCode] = useState('');
-  const [showImportOnLogin, setShowImportOnLogin] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   useEffect(() => { saveState(state); }, [state]);
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => { setToast({ message, type }); }, []);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    const user = state.users.find(u => u.username.toLowerCase() === loginData.username.trim().toLowerCase());
+    const user = state.users.find(u => 
+      u.username.toLowerCase() === loginForm.username.trim().toLowerCase() && 
+      u.password === loginForm.password
+    );
+    
     if (user) { 
       setState(prev => ({ ...prev, currentUser: user })); 
       setView('DASHBOARD'); 
       showToast(`Bem-vindo, ${user.rpName}!`); 
     } else { 
-      showToast('Usuário não autorizado neste computador.', 'error'); 
+      showToast('Usuário ou Senha incorretos.', 'error'); 
     }
   };
 
-  const handleLogout = () => { setState(prev => ({ ...prev, currentUser: null })); setView('LOGIN'); showToast('Sessão encerrada.'); };
+  const handleLogout = () => { setState(prev => ({ ...prev, currentUser: null })); setView('LOGIN'); setLoginForm({ username: '', password: '' }); showToast('Sessão encerrada.'); };
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (state.users.find(u => u.username.toLowerCase() === newUser.username.trim().toLowerCase())) {
-      showToast('Este usuário já existe.', 'error');
+      showToast('Este login já está em uso.', 'error');
       return;
     }
     const createdUser: User = {
       id: Math.random().toString(36).substr(2, 9),
       username: newUser.username.trim(),
+      password: newUser.password,
       rpName: newUser.rpName.trim(),
       balance: newUser.balance,
       role: newUser.role,
       createdAt: Date.now()
     };
     setState(prev => ({ ...prev, users: [...prev.users, createdUser] }));
-    setNewUser({ username: '', rpName: '', role: UserRole.USER, balance: 5000 });
-    showToast(`Usuário ${createdUser.rpName} criado!`);
+    setNewUser({ username: '', password: '', rpName: '', role: UserRole.USER, balance: 5000 });
+    showToast(`Usuário ${createdUser.rpName} criado com sucesso!`);
+  };
+
+  const deleteUser = (userId: string) => {
+    if (userId === '1') { showToast('Não é possível remover o administrador mestre.', 'error'); return; }
+    setState(prev => ({ ...prev, users: prev.users.filter(u => u.id !== userId) }));
+    showToast('Usuário removido.');
   };
 
   const exportDB = () => {
     const data = btoa(JSON.stringify({ users: state.users, bets: state.bets, draws: state.draws }));
-    setDbCode(data);
     navigator.clipboard.writeText(data);
-    showToast('Código copiado! Envie para seu amigo.');
+    showToast('Código de Backup copiado!');
   };
 
   const importDB = () => {
@@ -149,15 +161,15 @@ export default function App() {
       setState(prev => ({ ...prev, users: decoded.users, bets: decoded.bets, draws: decoded.draws }));
       showToast('Dados sincronizados com sucesso!');
       setDbCode('');
-      setShowImportOnLogin(false);
+      setShowImport(false);
     } catch (e) {
-      showToast('Código inválido ou corrompido.', 'error');
+      showToast('Código inválido.', 'error');
     }
   };
 
   const placeBet = (animalId: number, amount: number) => {
     if (!state.currentUser) return;
-    if (amount <= 0 || state.currentUser.balance < amount) { showToast('Erro na aposta.', 'error'); return; }
+    if (amount <= 0 || state.currentUser.balance < amount) { showToast('Saldo insuficiente.', 'error'); return; }
     const animal = ANIMALS.find(a => a.id === animalId)!;
     const newBet: Bet = { id: Math.random().toString(36).substr(2, 9), userId: state.currentUser.id, animalId, amount, drawId: null, status: 'PENDING', potentialWin: amount * animal.multiplier, createdAt: Date.now() };
     setState(prev => {
@@ -165,7 +177,7 @@ export default function App() {
       const updatedUsers = prev.users.map(u => u.id === prev.currentUser!.id ? { ...u, balance: updatedBalance } : u);
       return { ...prev, currentUser: { ...prev.currentUser!, balance: updatedBalance }, users: updatedUsers, bets: [...prev.bets, newBet] };
     });
-    showToast(`Aposta no ${animal.name} confirmada!`);
+    showToast(`Aposta confirmada!`);
   };
 
   const executeDraw = () => {
@@ -181,7 +193,7 @@ export default function App() {
       });
       return { ...prev, users: updatedUsers, currentUser: updatedUsers.find(u => u.id === prev.currentUser?.id) || null, draws: [newDraw, ...prev.draws], bets: updatedBets };
     });
-    showToast(`RESULTADO: ${animal.name.toUpperCase()}!`);
+    showToast(`Extração concluída: ${animal.name}!`);
   };
 
   const isAdmin = state.currentUser?.role === UserRole.ADMIN;
@@ -190,74 +202,71 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
       {view === 'LOGIN' ? (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950">
-          <div className="w-full max-w-md bg-slate-900 rounded-3xl border border-slate-800 shadow-[0_0_50px_-12px_rgba(79,70,229,0.3)] overflow-hidden">
-            <div className="p-10 bg-indigo-600 flex flex-col items-center text-center relative overflow-hidden">
-              <div className="absolute top-[-20%] left-[-20%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-              <Trophy size={64} className="mb-4 text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] relative z-10" />
-              <h1 className="text-4xl font-black mb-1 relative z-10 tracking-tighter">BichoRP</h1>
-              <p className="text-indigo-100 text-sm font-medium relative z-10 opacity-80">SISTEMA DE EXTRAÇÃO OFICIAL</p>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-slate-950">
+          <div className="w-full max-w-md space-y-8">
+            <div className="text-center">
+              <div className="mx-auto w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl shadow-indigo-500/20 mb-6">
+                <Lock className="text-white" size={32} />
+              </div>
+              <h1 className="text-4xl font-black tracking-tighter mb-2">BICHO RP</h1>
+              <p className="text-slate-500 uppercase text-[10px] font-bold tracking-[0.2em]">Acesso Restrito ao Sistema</p>
             </div>
-            <div className="p-8 space-y-6">
-              {!showImportOnLogin ? (
-                <>
-                  <form onSubmit={handleLogin} className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Identidade RP</label>
+
+            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
+              {!showImport ? (
+                <form onSubmit={handleLogin} className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Login</label>
+                    <div className="relative">
+                      <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
                       <input 
                         type="text" 
-                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-center font-bold text-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-slate-600" 
-                        placeholder="NOME DE USUÁRIO" 
-                        value={loginData.username} 
-                        onChange={e => setLoginData({username: e.target.value})} 
-                        required 
+                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 pl-12 font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                        placeholder="NOME DE USUÁRIO"
+                        value={loginForm.username}
+                        onChange={e => setLoginForm({...loginForm, username: e.target.value})}
+                        required
                       />
                     </div>
-                    <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-sm tracking-widest transition-all transform active:scale-[0.98] shadow-lg shadow-indigo-900/40 uppercase">
-                      Acessar Sistema
-                    </button>
-                  </form>
-                  <div className="pt-4 border-t border-slate-800/50 text-center">
-                    <button 
-                      onClick={() => setShowImportOnLogin(true)} 
-                      className="text-xs text-slate-500 hover:text-indigo-400 font-bold transition-colors flex items-center justify-center gap-2 mx-auto"
-                    >
-                      <RefreshCw size={14} /> JOGADOR NÃO ENCONTRADO? SINCRONIZAR
-                    </button>
                   </div>
-                </>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Senha</label>
+                    <div className="relative">
+                      <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+                      <input 
+                        type="password" 
+                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 pl-12 font-bold outline-none focus:ring-2 focus:ring-indigo-500 transition-all" 
+                        placeholder="••••••••"
+                        value={loginForm.password}
+                        onChange={e => setLoginForm({...loginForm, password: e.target.value})}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-sm uppercase tracking-widest transition-all shadow-lg shadow-indigo-900/20">
+                    Entrar
+                  </button>
+                  <button type="button" onClick={() => setShowImport(true)} className="w-full text-[10px] text-slate-500 hover:text-indigo-400 font-bold uppercase transition-colors">
+                    Sincronizar Backup
+                  </button>
+                </form>
               ) : (
-                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-3 items-start">
-                    <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-[10px] text-amber-200 leading-relaxed uppercase font-bold">
-                      Cole o código enviado pelo Diretor para liberar seu acesso neste computador.
-                    </p>
-                  </div>
+                <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                  <h3 className="text-sm font-bold text-center uppercase">Importar Dados</h3>
                   <textarea 
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-[10px] font-mono h-32 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
-                    placeholder="COLE O CÓDIGO AQUI..." 
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-[10px] font-mono h-32 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
+                    placeholder="Cole o código de backup aqui..." 
                     value={dbCode} 
                     onChange={e => setDbCode(e.target.value)}
                   ></textarea>
                   <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={() => setShowImportOnLogin(false)}
-                      className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-all"
-                    >
-                      VOLTAR
-                    </button>
-                    <button 
-                      onClick={importDB}
-                      className="p-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
-                    >
-                      <Upload size={14} /> SINCRONIZAR
-                    </button>
+                    <button onClick={() => setShowImport(false)} className="p-3 bg-slate-800 rounded-xl text-xs font-bold uppercase">Voltar</button>
+                    <button onClick={importDB} className="p-3 bg-indigo-600 rounded-xl text-xs font-bold uppercase">Sincronizar</button>
                   </div>
                 </div>
               )}
-              <p className="text-[9px] text-center text-slate-600 font-bold uppercase tracking-tighter">BichoRP v2.0 • Protegido por Diretor de Extração</p>
             </div>
+            <p className="text-center text-[9px] text-slate-700 font-bold uppercase tracking-widest">v3.0.0 • Sistema de Gestão RP</p>
           </div>
         </div>
       ) : (
@@ -265,19 +274,38 @@ export default function App() {
           <Navigation view={view} setView={setView} currentUser={state.currentUser} onLogout={handleLogout} />
           <main className="max-w-6xl mx-auto p-4 md:p-8">
             {view === 'DASHBOARD' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-end">
-                   <div>
-                      <h1 className="text-2xl font-bold">Olá, {state.currentUser?.rpName}</h1>
-                      <p className="text-slate-400">Status: <span className={isAdmin ? 'text-rose-400' : 'text-emerald-400'}>{isAdmin ? 'ADMINISTRADOR' : 'APOSTADOR'}</span></p>
-                   </div>
+              <div className="space-y-8">
+                <div>
+                  <h1 className="text-3xl font-black tracking-tight">Painel Principal</h1>
+                  <p className="text-slate-400">Bem-vindo de volta, <span className="text-indigo-400 font-bold">{state.currentUser?.rpName}</span></p>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-sm"><p className="text-slate-500 text-xs mb-1 uppercase font-bold">Saldo</p><h2 className="text-3xl font-bold font-mono text-emerald-400">RP$ {state.currentUser?.balance.toLocaleString()}</h2></div>
-                  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-sm"><p className="text-slate-500 text-xs mb-1 uppercase font-bold">Minhas Apostas</p><h2 className="text-3xl font-bold font-mono text-indigo-400">{myBets.length}</h2></div>
-                  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 border-l-4 border-l-amber-500 shadow-sm">
-                    <p className="text-slate-500 text-xs mb-1 uppercase font-bold">Último Ganhador</p>
-                    {state.draws[0] ? <div className="flex items-center gap-2"><AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)!} className="w-8 h-8 text-xl" /><span className="font-bold">{ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)?.name}</span></div> : <span className="text-slate-500 italic">Nenhum ainda</span>}
+                  <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+                    <div className="flex justify-between items-start mb-4">
+                      <Wallet className="text-emerald-400" size={24} />
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Saldo Atual</span>
+                    </div>
+                    <h2 className="text-3xl font-black font-mono text-emerald-400">RP$ {state.currentUser?.balance.toLocaleString()}</h2>
+                  </div>
+                  <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+                    <div className="flex justify-between items-start mb-4">
+                      <Gamepad2 className="text-indigo-400" size={24} />
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Jogos Feitos</span>
+                    </div>
+                    <h2 className="text-3xl font-black font-mono text-indigo-400">{myBets.length}</h2>
+                  </div>
+                  <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 border-l-4 border-amber-500">
+                    <div className="flex justify-between items-start mb-4">
+                      <Trophy className="text-amber-500" size={24} />
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Último Sorteado</span>
+                    </div>
+                    {state.draws[0] ? (
+                      <div className="flex items-center gap-3">
+                        <AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)!} className="w-10 h-10 text-2xl" />
+                        <span className="font-black text-lg uppercase">{ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)?.name}</span>
+                      </div>
+                    ) : <span className="text-slate-600 italic text-sm uppercase font-bold">Aguardando...</span>}
                   </div>
                 </div>
               </div>
@@ -285,19 +313,33 @@ export default function App() {
 
             {view === 'BET' && (
               <div className="space-y-6">
-                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
-                  <h2 className="text-xl font-bold flex items-center gap-2"><Gamepad2 className="text-emerald-400"/> Fazer Jogo</h2>
-                  <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700">
-                    <span className="px-4 text-xs font-bold text-slate-500">VALOR</span>
-                    <input type="number" value={betAmount} onChange={e => setBetAmount(Math.max(1, Number(e.target.value)))} className="bg-slate-950 border-none rounded-lg p-2 w-28 font-mono text-emerald-400 font-bold focus:ring-1 focus:ring-emerald-500 outline-none" />
+                <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <h2 className="text-xl font-black uppercase tracking-tight">Realizar Aposta</h2>
+                  <div className="flex items-center bg-slate-950 rounded-2xl p-2 border border-slate-800">
+                    <span className="px-4 text-[10px] font-black text-slate-500 uppercase">Valor do Lance</span>
+                    <input 
+                      type="number" 
+                      value={betAmount} 
+                      onChange={e => setBetAmount(Math.max(1, Number(e.target.value)))} 
+                      className="bg-slate-800 border-none rounded-xl p-3 w-32 font-mono text-emerald-400 font-bold text-center focus:ring-2 focus:ring-emerald-500 outline-none transition-all" 
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                   {ANIMALS.map(a => (
-                    <div key={a.id} onClick={() => setSelectedAnimalId(a.id)} className={`group p-4 rounded-2xl border-2 cursor-pointer transition-all ${selectedAnimalId === a.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-900'}`}>
-                      <div className="h-20 flex items-center justify-center mb-3"><AnimalIcon animal={a} className="w-16 h-16 text-4xl" /></div>
-                      <p className="font-bold text-xs text-center uppercase mb-3">{a.name}</p>
-                      <button onClick={(e) => { e.stopPropagation(); placeBet(a.id, betAmount); }} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] py-2 rounded-lg font-bold transition-colors">APOSTAR</button>
+                    <div 
+                      key={a.id} 
+                      onClick={() => setSelectedAnimalId(a.id)} 
+                      className={`group p-6 rounded-3xl border-2 transition-all cursor-pointer ${selectedAnimalId === a.id ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/20' : 'border-slate-800 bg-slate-900 hover:border-slate-700'}`}
+                    >
+                      <div className="h-20 flex items-center justify-center mb-4"><AnimalIcon animal={a} className="w-16 h-16 text-5xl" /></div>
+                      <p className="font-black text-xs text-center uppercase mb-4 tracking-tighter">{a.name}</p>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); placeBet(a.id, betAmount); }} 
+                        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] py-3 rounded-xl font-black transition-all shadow-md shadow-indigo-900/30 uppercase tracking-widest"
+                      >
+                        Apostar
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -305,31 +347,41 @@ export default function App() {
             )}
 
             {view === 'HISTORY' && (
-              <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-                <div className="p-6 border-b border-slate-800 font-bold flex items-center justify-between">
-                  <span>{isAdmin ? 'Histórico Global de Extrações' : 'Minhas Apostas Realizadas'}</span>
+              <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+                <div className="p-6 border-b border-slate-800 font-black uppercase tracking-widest text-xs flex justify-between bg-slate-900/50">
+                  <span>{isAdmin ? 'Histórico Geral de Extrações' : 'Meus Resultados'}</span>
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto">
                   {isAdmin ? (
-                    state.draws.length === 0 ? <div className="p-12 text-center text-slate-500 italic">Nenhum sorteio realizado.</div> :
+                    state.draws.length === 0 ? <div className="p-12 text-center text-slate-600 italic">Nenhuma extração registrada.</div> :
                     state.draws.map(d => (
-                      <div key={d.id} className="p-4 flex justify-between items-center border-b border-slate-800 hover:bg-slate-800/30">
-                        <div className="flex items-center gap-4">
-                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)!} className="w-12 h-12 text-2xl" />
-                          <div><span className="font-bold block uppercase">{ANIMALS.find(a => a.id === d.winningAnimalId)?.name}</span><span className="text-[10px] text-slate-500 font-mono">{new Date(d.drawTime).toLocaleString()}</span></div>
+                      <div key={d.id} className="p-6 flex justify-between items-center border-b border-slate-800 last:border-0 hover:bg-slate-800/20 transition-colors">
+                        <div className="flex items-center gap-6">
+                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)!} className="w-14 h-14 text-3xl" />
+                          <div>
+                            <span className="font-black block uppercase text-lg">{ANIMALS.find(a => a.id === d.winningAnimalId)?.name}</span>
+                            <span className="text-[10px] text-slate-500 font-mono font-bold">{new Date(d.drawTime).toLocaleString()}</span>
+                          </div>
                         </div>
-                        <div className="text-right"><span className="font-mono text-indigo-400 font-bold text-xl">Nº {String(d.winningNumber).padStart(2, '0')}</span></div>
+                        <div className="text-right">
+                          <span className="font-mono text-indigo-400 font-black text-3xl">Nº {String(d.winningNumber).padStart(2, '0')}</span>
+                        </div>
                       </div>
                     ))
                   ) : (
-                    myBets.length === 0 ? <div className="p-12 text-center text-slate-500 italic">Você não fez nenhuma aposta.</div> :
+                    myBets.length === 0 ? <div className="p-12 text-center text-slate-600 italic">Nenhuma aposta encontrada.</div> :
                     [...myBets].reverse().map(b => (
-                      <div key={b.id} className="p-4 flex justify-between items-center border-b border-slate-800">
+                      <div key={b.id} className="p-5 flex justify-between items-center border-b border-slate-800 last:border-0">
                         <div className="flex items-center gap-4">
-                          <AnimalIcon animal={ANIMALS.find(a => a.id === b.animalId)!} className="w-10 h-10 text-xl" />
-                          <div><span className="font-bold block text-sm uppercase">{ANIMALS.find(a => a.id === b.animalId)?.name}</span><span className="text-[10px] text-slate-500">Valor: RP$ {b.amount}</span></div>
+                          <AnimalIcon animal={ANIMALS.find(a => a.id === b.animalId)!} className="w-10 h-10 text-2xl" />
+                          <div>
+                            <span className="font-black block text-sm uppercase tracking-tight">{ANIMALS.find(a => a.id === b.animalId)?.name}</span>
+                            <span className="text-[10px] text-slate-500 font-bold uppercase">RP$ {b.amount.toLocaleString()}</span>
+                          </div>
                         </div>
-                        <div className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase border ${b.status === 'WON' ? 'border-emerald-500 text-emerald-500' : b.status === 'LOST' ? 'border-rose-500 text-rose-500' : 'border-amber-500 text-amber-500'}`}>{b.status === 'WON' ? 'VITÓRIA' : b.status === 'LOST' ? 'PERDIDA' : 'PENDENTE'}</div>
+                        <div className={`text-[10px] font-black px-4 py-2 rounded-xl border uppercase tracking-widest ${b.status === 'WON' ? 'border-emerald-500 text-emerald-500 bg-emerald-500/10' : b.status === 'LOST' ? 'border-rose-500 text-rose-500 bg-rose-500/10' : 'border-amber-500 text-amber-500 bg-amber-500/10'}`}>
+                          {b.status === 'WON' ? 'Vitória' : b.status === 'LOST' ? 'Perdida' : 'Pendente'}
+                        </div>
                       </div>
                     ))
                   )}
@@ -340,48 +392,81 @@ export default function App() {
             {view === 'ADMIN' && isAdmin && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-6">
-                  <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-xl">
-                    <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-indigo-400"><UserPlus size={20}/> Cadastrar Usuário</h2>
+                  {/* Create User Form */}
+                  <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-xl">
+                    <h2 className="text-xl font-black mb-6 flex items-center gap-3 text-indigo-400 uppercase tracking-tighter"><UserPlus size={24}/> Criar Novo Acesso</h2>
                     <form onSubmit={handleCreateUser} className="grid grid-cols-2 gap-4">
-                      <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Login (Identidade)</label><input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required /></div>
-                      <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Nome RP</label><input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.rpName} onChange={e => setNewUser({...newUser, rpName: e.target.value})} required /></div>
-                      <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Cargo</label><select className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}><option value={UserRole.USER}>Apostador</option><option value={UserRole.ADMIN}>Diretor</option></select></div>
-                      <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Créditos</label><input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.balance} onChange={e => setNewUser({...newUser, balance: Number(e.target.value)})} /></div>
-                      <button className="col-span-2 bg-indigo-600 p-3 rounded-xl font-bold text-sm hover:bg-indigo-500 mt-2 uppercase tracking-widest">AUTORIZAR ACESSO</button>
+                      <div className="col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Login</label>
+                        <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm font-bold" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} placeholder="Ex: marcos_rp" required />
+                      </div>
+                      <div className="col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Senha</label>
+                        <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm font-bold" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} placeholder="Senha inicial" required />
+                      </div>
+                      <div className="col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Nome RP</label>
+                        <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm font-bold" value={newUser.rpName} onChange={e => setNewUser({...newUser, rpName: e.target.value})} placeholder="Ex: Dr. Silva" required />
+                      </div>
+                      <div className="col-span-1 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Saldo Inicial</label>
+                        <input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm font-bold" value={newUser.balance} onChange={e => setNewUser({...newUser, balance: Number(e.target.value)})} />
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Cargo</label>
+                        <select className="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-sm font-bold" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}>
+                          <option value={UserRole.USER}>Apostador (USER)</option>
+                          <option value={UserRole.ADMIN}>Administrador (ADMIN)</option>
+                        </select>
+                      </div>
+                      <button className="col-span-2 bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all mt-2 shadow-lg shadow-indigo-900/20">
+                        Liberar Acesso
+                      </button>
                     </form>
                   </div>
 
-                  <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-xl">
-                    <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-400"><Database size={20}/> Banco de Dados</h2>
-                    <p className="text-xs text-slate-500 mb-6 italic uppercase font-bold tracking-tighter">Exportar para outros computadores:</p>
-                    <div className="space-y-4">
-                       <button onClick={exportDB} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-4 rounded-xl font-black text-xs transition-colors border border-slate-700 uppercase tracking-widest">
-                         <Download size={16}/> Copiar Código de Backup
-                       </button>
-                       <div className="border-t border-slate-800 pt-4">
-                          <p className="text-[9px] text-slate-600 mb-2 uppercase font-bold">Importar Backup Externo:</p>
-                          <textarea className="w-full bg-slate-950 p-3 rounded-lg text-[10px] font-mono mb-2 h-20 outline-none border border-slate-800" placeholder="Cole o código aqui..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
-                          <button onClick={importDB} className="w-full flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 p-3 rounded-lg font-bold text-xs transition-colors border border-indigo-500/30 uppercase tracking-widest">
-                            <Upload size={14}/> Sincronizar Agora
-                          </button>
-                       </div>
-                    </div>
+                  {/* Backup Card */}
+                  <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800">
+                    <h2 className="text-xl font-black mb-4 flex items-center gap-3 text-emerald-400 uppercase tracking-tighter"><Database size={24}/> Backup do Sistema</h2>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-6 leading-relaxed">Envie este código para seus amigos para sincronizar os usuários criados.</p>
+                    <button onClick={exportDB} className="w-full flex items-center justify-center gap-3 bg-slate-800 hover:bg-slate-700 p-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-slate-700 shadow-md">
+                      <Download size={18}/> Copiar Código Master
+                    </button>
                   </div>
                 </div>
 
                 <div className="space-y-6">
-                  <div className="bg-slate-900 p-8 rounded-2xl border-2 border-dashed border-rose-500/30 text-center shadow-xl">
-                    <h2 className="text-xl font-bold mb-6 uppercase tracking-widest text-rose-500">Extração Oficial</h2>
-                    <button onClick={executeDraw} className="bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all w-full p-8 rounded-3xl font-black text-4xl shadow-xl shadow-rose-900/40 border-b-8 border-rose-800">SORTEAR 🎲</button>
+                  {/* Draw Control */}
+                  <div className="bg-slate-900 p-8 rounded-3xl border-2 border-dashed border-rose-500/30 text-center shadow-xl">
+                    <h2 className="text-xl font-black mb-6 uppercase tracking-widest text-rose-500">Extração Oficial</h2>
+                    <button onClick={executeDraw} className="bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all w-full p-10 rounded-full font-black text-5xl shadow-xl shadow-rose-900/40 border-b-8 border-rose-800">SORTEAR 🎲</button>
                   </div>
 
-                  <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
-                    <h3 className="font-bold mb-4 flex items-center gap-2 border-b border-slate-800 pb-2"><Users size={18} className="text-emerald-400"/> Lista de Registros ({state.users.length})</h3>
-                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                  {/* Users List */}
+                  <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-sm">
+                    <div className="p-5 border-b border-slate-800 bg-slate-900/50 flex justify-between items-center">
+                      <h3 className="font-black text-xs uppercase tracking-widest flex items-center gap-2"><Users size={16} className="text-emerald-400"/> Gestão de Usuários</h3>
+                      <span className="text-[10px] font-bold text-slate-500">{state.users.length} ATIVOS</span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
                       {state.users.map(u => (
-                        <div key={u.id} className="flex justify-between items-center py-2 px-3 bg-slate-800/40 rounded border border-slate-700/50">
-                          <div><span className="font-bold text-xs">{u.rpName}</span><span className="text-[10px] text-slate-500 block">ID: {u.username}</span></div>
-                          <div className="text-right"><span className="font-mono text-emerald-400 font-bold text-xs">RP$ {u.balance.toLocaleString()}</span></div>
+                        <div key={u.id} className="flex justify-between items-center p-4 border-b border-slate-800 hover:bg-slate-800/30 transition-all">
+                          <div>
+                            <span className="font-black text-xs uppercase block">{u.rpName}</span>
+                            <div className="flex items-center gap-2">
+                               <span className="text-[9px] text-slate-500 font-mono uppercase">L: {u.username}</span>
+                               <span className="text-[9px] text-slate-500 font-mono uppercase">S: {u.password}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-4">
+                             <div className="text-right">
+                               <span className="font-mono text-emerald-400 font-black text-xs">RP$ {u.balance.toLocaleString()}</span>
+                               <span className={`block text-[8px] font-black uppercase ${u.role === UserRole.ADMIN ? 'text-rose-400' : 'text-indigo-400'}`}>{u.role}</span>
+                             </div>
+                             <button onClick={() => deleteUser(u.id)} className="p-2 text-slate-600 hover:text-rose-500 transition-colors">
+                               <Trash2 size={16} />
+                             </button>
+                          </div>
                         </div>
                       ))}
                     </div>
