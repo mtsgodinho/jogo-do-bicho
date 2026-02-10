@@ -117,7 +117,7 @@ export default function App() {
     e.preventDefault();
     const cleanUsername = loginForm.username.trim().toLowerCase();
     const user = state.users.find(u => u.username.trim().toLowerCase() === cleanUsername);
-    if (!user) { showToast('Usuário não sincronizado. Importe o código.', 'error'); return; }
+    if (!user) { showToast('Conta não encontrada neste dispositivo.', 'error'); return; }
     if (user.password.trim() === loginForm.password.trim()) { setState(prev => ({ ...prev, currentUser: user })); setView('DASHBOARD'); showToast(`Bem-vindo, ${user.rpName}!`); }
     else { showToast('Senha incorreta.', 'error'); }
   };
@@ -131,7 +131,7 @@ export default function App() {
     const createdUser: User = { id: Math.random().toString(36).substr(2, 9), username: newUser.username.trim(), password: newUser.password.trim(), rpName: newUser.rpName.trim(), balance: newUser.balance, role: newUser.role, createdAt: Date.now() };
     setState(prev => ({ ...prev, users: [...prev.users, createdUser] }));
     setNewUser({ username: '', password: '', rpName: '', role: UserRole.USER, balance: 5000 });
-    showToast(`Conta criada!`);
+    showToast(`Conta criada! Lembre-se de mandar o código master para seu amigo.`);
   };
 
   const deleteUser = (userId: string) => {
@@ -155,12 +155,12 @@ export default function App() {
         bets: decoded.bets, 
         draws: decoded.draws 
       };
-      // Preservar login se o usuário importado for o mesmo
       if (state.currentUser) {
         newStateData.currentUser = decoded.users.find((u: User) => u.id === state.currentUser?.id) || state.currentUser;
       }
       setState(newStateData);
       setDbCode('');
+      setShowImport(false);
       showToast('Sincronização concluída!');
     } catch (e) { showToast('Código inválido.', 'error'); }
   };
@@ -186,21 +186,12 @@ export default function App() {
     setState(prev => {
       const updatedBets = prev.bets.map(b => b.status !== 'PENDING' ? b : { ...b, drawId, status: b.animalId === animal.id ? 'WON' : 'LOST' as any });
       let updatedUsers = [...prev.users];
-      
-      // Aplicar prêmios a todos os ganhadores sincronizados
       updatedBets.filter(b => b.status === 'WON' && b.drawId === drawId).forEach(w => {
         updatedUsers = updatedUsers.map(u => u.id === w.userId ? { ...u, balance: u.balance + w.potentialWin } : u);
       });
-
-      return { 
-        ...prev, 
-        users: updatedUsers, 
-        currentUser: updatedUsers.find(u => u.id === prev.currentUser?.id) || prev.currentUser,
-        draws: [newDraw, ...prev.draws], 
-        bets: updatedBets 
-      };
+      return { ...prev, users: updatedUsers, currentUser: updatedUsers.find(u => u.id === prev.currentUser?.id) || prev.currentUser, draws: [newDraw, ...prev.draws], bets: updatedBets };
     });
-    showToast(`Sorteado: ${animal.name}! Envie o novo código master.`);
+    showToast(`Sorteado: ${animal.name}! Mande o novo código master para todos.`);
   };
 
   const isAdmin = state.currentUser?.role === UserRole.ADMIN;
@@ -214,32 +205,39 @@ export default function App() {
             <div className="text-center">
               <div className="mx-auto w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-xl mb-6"><Lock className="text-white" size={32} /></div>
               <h1 className="text-4xl font-black mb-1">BICHO RP</h1>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{state.users.length} Contas Sincronizadas</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{state.users.length} Contas no Dispositivo</p>
             </div>
-            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl">
+            <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl relative">
               {!showImport ? (
                 <form onSubmit={handleLogin} className="space-y-5">
+                  {state.users.length === 1 && (
+                    <div className="bg-indigo-500/10 border border-indigo-500/30 p-3 rounded-xl flex gap-3 items-center mb-4">
+                      <Info size={18} className="text-indigo-400 shrink-0" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase leading-tight">Nenhuma conta de jogador encontrada. Importe o código do Admin para entrar.</p>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Seu Login</label>
-                    <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 font-bold" placeholder="Nome de usuário" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} required />
+                    <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 font-bold outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Nome de usuário" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} required />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Sua Senha</label>
-                    <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 font-bold" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required />
+                    <input type="password" className="w-full bg-slate-800 border border-slate-700 rounded-xl p-4 font-bold outline-none focus:ring-1 focus:ring-indigo-500" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required />
                   </div>
-                  <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black uppercase transition-all shadow-lg active:scale-95">Entrar</button>
+                  <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black uppercase transition-all shadow-lg active:scale-95">Entrar no Jogo</button>
                   <div className="pt-4 border-t border-slate-800 flex flex-col gap-3">
-                    <button type="button" onClick={() => setShowImport(true)} className="text-[10px] text-indigo-400 font-bold uppercase flex items-center justify-center gap-2"><Upload size={12}/> Importar Backup (Admin)</button>
-                    <button type="button" onClick={handleHardReset} className="text-[10px] text-rose-500/50 font-bold uppercase flex items-center justify-center gap-2"><TriangleAlert size={12}/> Resetar Navegador</button>
+                    <button type="button" onClick={() => setShowImport(true)} className="text-[11px] text-indigo-400 font-bold uppercase flex items-center justify-center gap-2 hover:text-indigo-300 transition-colors"><Upload size={14}/> Sincronizar (Código Master)</button>
+                    <button type="button" onClick={handleHardReset} className="text-[10px] text-rose-500/50 font-bold uppercase flex items-center justify-center gap-2"><TriangleAlert size={12}/> Limpar Dados</button>
                   </div>
                 </form>
               ) : (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-bold uppercase text-center">Sincronização Master</h3>
-                  <textarea className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-[10px] font-mono h-32" placeholder="Cole o código aqui..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
+                <div className="space-y-4 animate-in fade-in zoom-in duration-200">
+                  <h3 className="text-sm font-black uppercase text-center text-indigo-400">Importar Dados do Servidor</h3>
+                  <p className="text-[10px] text-slate-500 font-bold uppercase text-center">Cole o código recebido do Admin abaixo:</p>
+                  <textarea className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-[10px] font-mono h-40 outline-none focus:ring-1 focus:ring-indigo-500 resize-none" placeholder="Pressione Ctrl+V aqui..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
                   <div className="grid grid-cols-2 gap-3">
                     <button onClick={() => setShowImport(false)} className="p-3 bg-slate-800 rounded-xl text-xs font-bold uppercase">Voltar</button>
-                    <button onClick={importState} className="p-3 bg-indigo-600 rounded-xl text-xs font-bold uppercase">Sincronizar</button>
+                    <button onClick={importState} className="p-3 bg-indigo-600 rounded-xl text-xs font-bold uppercase shadow-lg shadow-indigo-900/20">Sincronizar</button>
                   </div>
                 </div>
               )}
@@ -257,35 +255,22 @@ export default function App() {
                   <h2 className="text-3xl font-black uppercase">Central de Sincronia</h2>
                   <p className="text-slate-400 text-sm font-bold uppercase tracking-tight">O dinheiro só entra se você trocar os códigos!</p>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-900 p-8 rounded-3xl border border-emerald-500/30 flex flex-col items-center text-center">
+                  <div className="bg-slate-900 p-8 rounded-3xl border border-emerald-500/30 flex flex-col items-center text-center shadow-xl">
                     <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mb-4 text-emerald-500"><Download size={32}/></div>
                     <h3 className="font-black text-lg mb-2 uppercase">ENVIAR DADOS</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-6 leading-relaxed">Clique abaixo para gerar o código com suas apostas e mande para o Admin.</p>
-                    <button onClick={exportState} className="w-full bg-emerald-600 hover:bg-emerald-500 p-4 rounded-xl font-black text-xs uppercase transition-all shadow-lg">Copiar Meu Código</button>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-6 leading-relaxed">Gere o código com suas apostas/prêmios e mande para os outros.</p>
+                    <button onClick={exportState} className="w-full bg-emerald-600 hover:bg-emerald-500 p-4 rounded-xl font-black text-xs uppercase transition-all shadow-lg active:scale-95">Copiar Meu Código</button>
                   </div>
-
-                  <div className="bg-slate-900 p-8 rounded-3xl border border-indigo-500/30 flex flex-col items-center text-center">
+                  <div className="bg-slate-900 p-8 rounded-3xl border border-indigo-500/30 flex flex-col items-center text-center shadow-xl">
                     <div className="w-16 h-16 bg-indigo-500/10 rounded-full flex items-center justify-center mb-4 text-indigo-500"><Upload size={32}/></div>
                     <h3 className="font-black text-lg mb-2 uppercase">RECEBER DADOS</h3>
-                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-6 leading-relaxed">Cole o código que o Admin (ou amigo) te mandou para atualizar tudo.</p>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase mb-6 leading-relaxed">Cole o código recebido para atualizar o saldo e as apostas.</p>
                     <div className="w-full space-y-3">
                       <textarea className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-[9px] font-mono h-20 outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Cole aqui..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
-                      <button onClick={importState} className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-xs uppercase transition-all shadow-lg">Sincronizar Agora</button>
+                      <button onClick={importState} className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-xs uppercase transition-all shadow-lg active:scale-95">Sincronizar Agora</button>
                     </div>
                   </div>
-                </div>
-
-                <div className="bg-indigo-600/10 p-6 rounded-3xl border border-indigo-600/20">
-                   <h4 className="font-black text-xs text-indigo-400 uppercase mb-4 flex items-center gap-2"><Info size={14}/> Passo a Passo para o Dinheiro Entrar:</h4>
-                   <ol className="text-[11px] font-bold text-slate-400 uppercase space-y-3 list-decimal pl-4">
-                     <li>O Amigo faz a aposta e clica em <span className="text-emerald-400">ENVIAR DADOS</span>.</li>
-                     <li>Ele manda o código para o <span className="text-rose-400">ADMIN</span>.</li>
-                     <li>O Admin cola o código em <span className="text-indigo-400">RECEBER DADOS</span>.</li>
-                     <li>Agora o Admin pode <span className="text-white">SORTEAR</span> (o sistema já verá a aposta).</li>
-                     <li>Após o sorteio, o Admin clica em <span className="text-emerald-400">ENVIAR DADOS</span> e manda de volta para o amigo.</li>
-                   </ol>
                 </div>
               </div>
             )}
@@ -362,29 +347,36 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-6">
                   <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-xl">
-                    <h2 className="text-xl font-black mb-6 flex items-center gap-3 text-indigo-400 uppercase"><UserPlus size={24}/> Criar Conta</h2>
-                    <form onSubmit={handleCreateUser} className="grid grid-cols-2 gap-4">
-                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold" placeholder="Login" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required />
-                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold" placeholder="Senha" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required />
-                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold" placeholder="Nome GTA" value={newUser.rpName} onChange={e => setNewUser({...newUser, rpName: e.target.value})} required />
-                      <input type="number" className="bg-slate-800 rounded-xl p-3 text-sm font-bold" placeholder="Saldo" value={newUser.balance} onChange={e => setNewUser({...newUser, balance: Number(e.target.value)})} />
-                      <button className="col-span-2 bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black uppercase text-xs transition-all shadow-lg">Confirmar</button>
+                    <h2 className="text-xl font-black mb-6 flex items-center gap-3 text-indigo-400 uppercase"><UserPlus size={24}/> Gerenciar Contas</h2>
+                    <form onSubmit={handleCreateUser} className="grid grid-cols-2 gap-4 mb-8">
+                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold border border-slate-700 outline-none" placeholder="Login" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} required />
+                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold border border-slate-700 outline-none" placeholder="Senha" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required />
+                      <input type="text" className="bg-slate-800 rounded-xl p-3 text-sm font-bold border border-slate-700 outline-none" placeholder="Nome GTA" value={newUser.rpName} onChange={e => setNewUser({...newUser, rpName: e.target.value})} required />
+                      <input type="number" className="bg-slate-800 rounded-xl p-3 text-sm font-bold border border-slate-700 outline-none" placeholder="Saldo" value={newUser.balance} onChange={e => setNewUser({...newUser, balance: Number(e.target.value)})} />
+                      <button className="col-span-2 bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black uppercase text-xs transition-all shadow-lg active:scale-95">Criar Conta</button>
                     </form>
+                    <div className="pt-6 border-t border-slate-800">
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-4 tracking-widest">Sincronia Rápida</h4>
+                      <button onClick={exportState} className="w-full flex items-center justify-center gap-3 bg-emerald-600 hover:bg-emerald-500 p-5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-900/20 active:scale-[0.98]">
+                        <Download size={18}/> COPIAR CÓDIGO MASTER
+                      </button>
+                      <p className="text-[9px] text-slate-600 font-bold uppercase mt-3 text-center">Mande este código para seus amigos entrarem no jogo.</p>
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-6">
                   <div className="bg-slate-900 p-8 rounded-3xl border-2 border-dashed border-rose-500/30 text-center shadow-xl">
-                    <h2 className="text-xl font-black mb-6 uppercase text-rose-500">Extração Oficial</h2>
+                    <h2 className="text-xl font-black mb-6 uppercase text-rose-500">Mesa de Extração</h2>
                     <div className="mb-4 text-[10px] font-bold text-slate-500 uppercase">Apostas Pendentes: {state.bets.filter(b => b.status === 'PENDING').length}</div>
-                    <button onClick={executeDraw} className="bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all w-full p-10 rounded-full font-black text-5xl border-b-8 border-rose-800">SORTEAR 🎲</button>
+                    <button onClick={executeDraw} className="bg-rose-600 hover:bg-rose-500 active:scale-95 transition-all w-full p-10 rounded-full font-black text-5xl border-b-8 border-rose-800 shadow-xl shadow-rose-950/50">SORTEAR 🎲</button>
                   </div>
                   <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-sm">
-                    <div className="p-5 border-b border-slate-800 bg-slate-900/50"><h3 className="font-black text-xs uppercase">Contas Sincronizadas ({state.users.length})</h3></div>
+                    <div className="p-5 border-b border-slate-800 bg-slate-900/50"><h3 className="font-black text-xs uppercase">Usuários ({state.users.length})</h3></div>
                     <div className="max-h-80 overflow-y-auto">
                       {state.users.map(u => (
                         <div key={u.id} className="flex justify-between items-center p-4 border-b border-slate-800">
                           <div><span className="font-black text-xs uppercase block text-indigo-300">{u.rpName}</span><span className="text-[9px] text-slate-500 font-mono uppercase">L: {u.username} | P: {u.password}</span></div>
-                          <div className="flex items-center gap-4"><span className="font-mono text-emerald-400 font-black text-xs">RP$ {u.balance.toLocaleString()}</span><button onClick={() => deleteUser(u.id)} className="text-slate-700 hover:text-rose-500"><Trash2 size={16}/></button></div>
+                          <div className="flex items-center gap-4"><span className="font-mono text-emerald-400 font-black text-xs">RP$ {u.balance.toLocaleString()}</span><button onClick={() => deleteUser(u.id)} className="text-slate-700 hover:text-rose-500 transition-colors"><Trash2 size={16}/></button></div>
                         </div>
                       ))}
                     </div>
