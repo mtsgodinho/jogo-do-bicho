@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, UserRole, AppState, Bet, Draw, Animal } from './types.ts';
-import { ANIMALS, INITIAL_CREDITS, STORAGE_KEY } from './constants.tsx';
+import { ANIMALS, STORAGE_KEY } from './constants.tsx';
 import { 
   Trophy, 
   History as HistoryIcon, 
@@ -19,7 +19,8 @@ import {
   Database,
   Download,
   Upload,
-  Users
+  Users,
+  RefreshCw
 } from 'lucide-react';
 
 // --- Sub-Components ---
@@ -96,6 +97,7 @@ export default function App() {
   
   const [newUser, setNewUser] = useState({ username: '', rpName: '', role: UserRole.USER, balance: 5000 });
   const [dbCode, setDbCode] = useState('');
+  const [showImportOnLogin, setShowImportOnLogin] = useState(false);
 
   useEffect(() => { saveState(state); }, [state]);
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => { setToast({ message, type }); }, []);
@@ -108,7 +110,7 @@ export default function App() {
       setView('DASHBOARD'); 
       showToast(`Bem-vindo, ${user.rpName}!`); 
     } else { 
-      showToast('Usuário não autorizado.', 'error'); 
+      showToast('Usuário não autorizado neste computador.', 'error'); 
     }
   };
 
@@ -142,12 +144,14 @@ export default function App() {
 
   const importDB = () => {
     try {
-      const decoded = JSON.parse(atob(dbCode));
+      if (!dbCode.trim()) return;
+      const decoded = JSON.parse(atob(dbCode.trim()));
       setState(prev => ({ ...prev, users: decoded.users, bets: decoded.bets, draws: decoded.draws }));
-      showToast('Banco de dados sincronizado!');
+      showToast('Dados sincronizados com sucesso!');
       setDbCode('');
+      setShowImportOnLogin(false);
     } catch (e) {
-      showToast('Código de sincronização inválido.', 'error');
+      showToast('Código inválido ou corrompido.', 'error');
     }
   };
 
@@ -186,22 +190,73 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-indigo-500 selection:text-white">
       {view === 'LOGIN' ? (
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl overflow-hidden">
-            <div className="p-10 bg-indigo-600 flex flex-col items-center text-center">
-              <Trophy size={64} className="mb-4 text-white drop-shadow-lg" />
-              <h1 className="text-3xl font-bold mb-1">BichoRP</h1>
-              <p className="text-indigo-100 text-sm">Terminal de Apostas Exclusivo</p>
+        <div className="min-h-screen flex items-center justify-center p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/20 via-slate-950 to-slate-950">
+          <div className="w-full max-w-md bg-slate-900 rounded-3xl border border-slate-800 shadow-[0_0_50px_-12px_rgba(79,70,229,0.3)] overflow-hidden">
+            <div className="p-10 bg-indigo-600 flex flex-col items-center text-center relative overflow-hidden">
+              <div className="absolute top-[-20%] left-[-20%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
+              <Trophy size={64} className="mb-4 text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] relative z-10" />
+              <h1 className="text-4xl font-black mb-1 relative z-10 tracking-tighter">BichoRP</h1>
+              <p className="text-indigo-100 text-sm font-medium relative z-10 opacity-80">SISTEMA DE EXTRAÇÃO OFICIAL</p>
             </div>
-            <div className="p-8">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Seu Login RP</label>
-                  <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-center font-bold outline-none focus:ring-2 focus:ring-indigo-500" placeholder="DIGITE SEU USUÁRIO" value={loginData.username} onChange={e => setLoginData({username: e.target.value})} required />
+            <div className="p-8 space-y-6">
+              {!showImportOnLogin ? (
+                <>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-1">Identidade RP</label>
+                      <input 
+                        type="text" 
+                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl p-4 text-center font-bold text-lg outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all placeholder:text-slate-600" 
+                        placeholder="NOME DE USUÁRIO" 
+                        value={loginData.username} 
+                        onChange={e => setLoginData({username: e.target.value})} 
+                        required 
+                      />
+                    </div>
+                    <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-xl font-black text-sm tracking-widest transition-all transform active:scale-[0.98] shadow-lg shadow-indigo-900/40 uppercase">
+                      Acessar Sistema
+                    </button>
+                  </form>
+                  <div className="pt-4 border-t border-slate-800/50 text-center">
+                    <button 
+                      onClick={() => setShowImportOnLogin(true)} 
+                      className="text-xs text-slate-500 hover:text-indigo-400 font-bold transition-colors flex items-center justify-center gap-2 mx-auto"
+                    >
+                      <RefreshCw size={14} /> JOGADOR NÃO ENCONTRADO? SINCRONIZAR
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-3 items-start">
+                    <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] text-amber-200 leading-relaxed uppercase font-bold">
+                      Cole o código enviado pelo Diretor para liberar seu acesso neste computador.
+                    </p>
+                  </div>
+                  <textarea 
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-4 text-[10px] font-mono h-32 focus:ring-2 focus:ring-indigo-500 outline-none resize-none" 
+                    placeholder="COLE O CÓDIGO AQUI..." 
+                    value={dbCode} 
+                    onChange={e => setDbCode(e.target.value)}
+                  ></textarea>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setShowImportOnLogin(false)}
+                      className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold transition-all"
+                    >
+                      VOLTAR
+                    </button>
+                    <button 
+                      onClick={importDB}
+                      className="p-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/20"
+                    >
+                      <Upload size={14} /> SINCRONIZAR
+                    </button>
+                  </div>
                 </div>
-                <button className="w-full bg-indigo-600 hover:bg-indigo-500 p-4 rounded-lg font-bold transition-all transform active:scale-95 shadow-lg shadow-indigo-900/40">ACESSAR PAINEL</button>
-                <p className="text-[10px] text-center text-slate-600 uppercase mt-4">Somente usuários cadastrados pelo Diretor podem acessar.</p>
-              </form>
+              )}
+              <p className="text-[9px] text-center text-slate-600 font-bold uppercase tracking-tighter">BichoRP v2.0 • Protegido por Diretor de Extração</p>
             </div>
           </div>
         </div>
@@ -292,18 +347,23 @@ export default function App() {
                       <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Nome RP</label><input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.rpName} onChange={e => setNewUser({...newUser, rpName: e.target.value})} required /></div>
                       <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Cargo</label><select className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value as UserRole})}><option value={UserRole.USER}>Apostador</option><option value={UserRole.ADMIN}>Diretor</option></select></div>
                       <div className="col-span-1"><label className="text-[10px] font-bold text-slate-500 uppercase">Créditos</label><input type="number" className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-sm" value={newUser.balance} onChange={e => setNewUser({...newUser, balance: Number(e.target.value)})} /></div>
-                      <button className="col-span-2 bg-indigo-600 p-3 rounded-xl font-bold text-sm hover:bg-indigo-500 mt-2">AUTORIZAR ACESSO</button>
+                      <button className="col-span-2 bg-indigo-600 p-3 rounded-xl font-bold text-sm hover:bg-indigo-500 mt-2 uppercase tracking-widest">AUTORIZAR ACESSO</button>
                     </form>
                   </div>
 
                   <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800 shadow-xl">
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-emerald-400"><Database size={20}/> Banco de Dados</h2>
-                    <p className="text-xs text-slate-500 mb-6 italic">Como os dados estão no seu navegador, você precisa enviar o código abaixo para que seu amigo consiga acessar o sistema com o usuário que você criou.</p>
+                    <p className="text-xs text-slate-500 mb-6 italic uppercase font-bold tracking-tighter">Exportar para outros computadores:</p>
                     <div className="space-y-4">
-                       <button onClick={exportDB} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-3 rounded-lg font-bold text-sm transition-colors border border-slate-700"><Download size={16}/> EXPORTAR E COPIAR CÓDIGO</button>
+                       <button onClick={exportDB} className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-4 rounded-xl font-black text-xs transition-colors border border-slate-700 uppercase tracking-widest">
+                         <Download size={16}/> Copiar Código de Backup
+                       </button>
                        <div className="border-t border-slate-800 pt-4">
-                          <textarea className="w-full bg-slate-950 p-3 rounded-lg text-[10px] font-mono mb-2 h-20 outline-none border border-slate-800" placeholder="Cole o código recebido aqui para sincronizar..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
-                          <button onClick={importDB} className="w-full flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 p-3 rounded-lg font-bold text-sm transition-colors border border-indigo-500/30"><Upload size={16}/> IMPORTAR CÓDIGO</button>
+                          <p className="text-[9px] text-slate-600 mb-2 uppercase font-bold">Importar Backup Externo:</p>
+                          <textarea className="w-full bg-slate-950 p-3 rounded-lg text-[10px] font-mono mb-2 h-20 outline-none border border-slate-800" placeholder="Cole o código aqui..." value={dbCode} onChange={e => setDbCode(e.target.value)}></textarea>
+                          <button onClick={importDB} className="w-full flex items-center justify-center gap-2 bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 p-3 rounded-lg font-bold text-xs transition-colors border border-indigo-500/30 uppercase tracking-widest">
+                            <Upload size={14}/> Sincronizar Agora
+                          </button>
                        </div>
                     </div>
                   </div>
@@ -316,8 +376,8 @@ export default function App() {
                   </div>
 
                   <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
-                    <h3 className="font-bold mb-4 flex items-center gap-2 border-b border-slate-800 pb-2"><Users size={18} className="text-emerald-400"/> Jogadores Online ({state.users.length})</h3>
-                    <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                    <h3 className="font-bold mb-4 flex items-center gap-2 border-b border-slate-800 pb-2"><Users size={18} className="text-emerald-400"/> Lista de Registros ({state.users.length})</h3>
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
                       {state.users.map(u => (
                         <div key={u.id} className="flex justify-between items-center py-2 px-3 bg-slate-800/40 rounded border border-slate-700/50">
                           <div><span className="font-bold text-xs">{u.rpName}</span><span className="text-[10px] text-slate-500 block">ID: {u.username}</span></div>
