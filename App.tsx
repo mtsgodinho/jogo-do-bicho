@@ -9,43 +9,28 @@ import {
   Settings, 
   LogOut, 
   Wallet,
-  Calendar,
   AlertCircle,
   CheckCircle2,
-  TrendingUp,
   User as UserIcon,
   Play
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-
-// --- Helpers ---
-const loadState = (): AppState => {
-  if (typeof window === 'undefined') return { currentUser: null, users: [], bets: [], draws: [], animals: ANIMALS };
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try { return JSON.parse(saved); } catch (e) { console.error("Falha ao ler estado", e); }
-  }
-  return {
-    currentUser: null,
-    users: [
-      { id: '1', username: 'admin', rpName: 'Padrinho do Bicho', balance: 999999, role: UserRole.ADMIN, createdAt: Date.now() },
-      { id: '2', username: 'player', rpName: 'Apostador Nato', balance: 5000, role: UserRole.USER, createdAt: Date.now() }
-    ],
-    bets: [],
-    draws: [{ id: 'init', drawTime: Date.now() + 3600000, winningNumber: null, winningAnimalId: null, status: 'SCHEDULED' }],
-    animals: ANIMALS
-  };
-};
-
-const saveState = (state: AppState) => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); };
 
 // --- Sub-Components ---
 const AnimalIcon: React.FC<{ animal: Animal; className?: string }> = ({ animal, className = "" }) => {
   const isUrl = animal.icon.startsWith('http');
   if (isUrl) {
-    return <img src={animal.icon} alt={animal.name} className={`object-cover rounded-md ${className}`} />;
+    return (
+      <div className={`relative overflow-hidden bg-slate-800 rounded-md flex items-center justify-center ${className}`}>
+        <img 
+          src={animal.icon} 
+          alt={animal.name} 
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+    );
   }
-  return <span className={className}>{animal.icon}</span>;
+  return <span className={`flex items-center justify-center ${className}`}>{animal.icon}</span>;
 };
 
 const Toast: React.FC<{ message: string; type: 'success' | 'error'; onClose: () => void }> = ({ message, type, onClose }) => {
@@ -80,6 +65,27 @@ const Navigation: React.FC<{ view: string; setView: (v: any) => void; currentUse
     </div>
   </nav>
 );
+
+// --- Helpers ---
+const loadState = (): AppState => {
+  if (typeof window === 'undefined') return { currentUser: null, users: [], bets: [], draws: [], animals: ANIMALS };
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try { return JSON.parse(saved); } catch (e) { console.error("Falha ao ler estado", e); }
+  }
+  return {
+    currentUser: null,
+    users: [
+      { id: '1', username: 'admin', rpName: 'Padrinho do Bicho', balance: 999999, role: UserRole.ADMIN, createdAt: Date.now() },
+      { id: '2', username: 'player', rpName: 'Apostador Nato', balance: 5000, role: UserRole.USER, createdAt: Date.now() }
+    ],
+    bets: [],
+    draws: [{ id: 'init', drawTime: Date.now() + 3600000, winningNumber: null, winningAnimalId: null, status: 'SCHEDULED' }],
+    animals: ANIMALS
+  };
+};
+
+const saveState = (state: AppState) => { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); };
 
 export default function App() {
   const [state, setState] = useState<AppState>(loadState);
@@ -185,13 +191,12 @@ export default function App() {
                     <p className="text-slate-400 text-sm mb-2 uppercase tracking-wider font-semibold">Último Ganhador</p>
                     {state.draws[0]?.winningAnimalId ? (
                       <div className="flex items-center space-x-3">
-                        <AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)!} className="w-10 h-10 text-3xl" />
+                        <AnimalIcon animal={ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)!} className="w-12 h-12 text-3xl" />
                         <span className="font-bold text-xl">{ANIMALS.find(a => a.id === state.draws[0].winningAnimalId)?.name}</span>
                       </div>
                     ) : <span className="text-slate-500">Aguardando sorteio...</span>}
                   </div>
                 </div>
-                {/* Aqui poderiam entrar gráficos de Recharts futuramente */}
               </div>
             )}
             {view === 'BET' && (
@@ -209,8 +214,8 @@ export default function App() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                   {ANIMALS.map(a => (
                     <div key={a.id} onClick={() => setSelectedAnimalId(a.id)} className={`p-4 rounded-xl border-2 cursor-pointer text-center transition-all hover:shadow-lg hover:shadow-indigo-500/10 ${selectedAnimalId === a.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-900'}`}>
-                      <div className="h-16 flex items-center justify-center mb-2">
-                        <AnimalIcon animal={a} className="w-14 h-14 text-4xl" />
+                      <div className="h-20 flex items-center justify-center mb-3">
+                        <AnimalIcon animal={a} className="w-16 h-16 text-4xl" />
                       </div>
                       <p className="font-bold text-sm mb-1 uppercase tracking-tight">{a.name}</p>
                       <p className="text-xs text-slate-500 font-mono mb-3">{a.numbers.join(',')}</p>
@@ -233,7 +238,7 @@ export default function App() {
                     state.draws.filter(d => d.status === 'COMPLETED').map(d => (
                       <div key={d.id} className="p-4 flex justify-between items-center border-b border-slate-800 last:border-0 hover:bg-slate-800/50 transition-colors">
                         <div className="flex items-center space-x-4">
-                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)!} className="w-12 h-12 text-3xl" />
+                          <AnimalIcon animal={ANIMALS.find(a => a.id === d.winningAnimalId)!} className="w-14 h-14 text-3xl" />
                           <div>
                             <span className="font-bold block">{ANIMALS.find(a => a.id === d.winningAnimalId)?.name}</span>
                             <span className="text-xs text-slate-500">{new Date(d.drawTime).toLocaleString()}</span>
