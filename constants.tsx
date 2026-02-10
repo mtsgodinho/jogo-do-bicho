@@ -2,9 +2,9 @@
 import { Animal } from './types';
 
 export const ANIMALS: Animal[] = [
-  { id: 1, name: 'Avestruz', numbers: [1, 2, 3, 4], multiplier: 18, icon: '🦃' },
+  { id: 1, name: 'Avestruz', numbers: [1, 2, 3, 4], multiplier: 18, icon: 'https://images.unsplash.com/photo-1575550959106-5a7defe28b56?auto=format&fit=crop&q=80&w=200' },
   { id: 2, name: 'Águia', numbers: [5, 6, 7, 8], multiplier: 18, icon: '🦅' },
-  { id: 3, name: 'Burro', numbers: [9, 10, 11, 12], multiplier: 18, icon: '🦙' },
+  { id: 3, name: 'Burro', numbers: [9, 10, 11, 12], multiplier: 18, icon: 'https://images.unsplash.com/photo-1534445331316-01582e0e56e4?auto=format&fit=crop&q=80&w=200' },
   { id: 4, name: 'Borboleta', numbers: [13, 14, 15, 16], multiplier: 18, icon: '🦋' },
   { id: 5, name: 'Cachorro', numbers: [17, 18, 19, 20], multiplier: 18, icon: '🐕' },
   { id: 6, name: 'Cabra', numbers: [21, 22, 23, 24], multiplier: 18, icon: '🐐' },
